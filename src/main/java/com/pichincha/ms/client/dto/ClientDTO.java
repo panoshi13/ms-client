@@ -6,12 +6,15 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Getter
 @Setter
 @AllArgsConstructor
+@NoArgsConstructor
 public class ClientDTO {
+    private Long id;
     @NotBlank(message = "El nombre no puede estar vacío.")
     @Size(min = 2, max = 50, message = "El nombre debe tener entre 2 y 50 caracteres.")
     private String name;

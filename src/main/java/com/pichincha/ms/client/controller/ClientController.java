@@ -2,6 +2,8 @@ package com.pichincha.ms.client.controller;
 
 import com.pichincha.ms.client.dto.ClientDTO;
 import com.pichincha.ms.client.service.ClientService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import javax.validation.Valid;
+
 
 @Validated
 @RestController
@@ -30,14 +32,17 @@ public class ClientController {
     }
 
     @PutMapping("/{id}")
-    public Mono<ResponseEntity<ClientDTO>> updateClient(@PathVariable Long id, @RequestBody ClientDTO client) {
+    public Mono<ResponseEntity<ClientDTO>> updateClient(@PathVariable Long id, @RequestBody @Valid ClientDTO client) {
         return clientService.updateClient(id, client)
                 .map(ResponseEntity::ok);
     }
 
     @GetMapping
-    public Flux<ClientDTO> searchClients(@NotBlank @RequestParam(required = false) String name,
-                                      @NotBlank @RequestParam(required = false) String email) {
+    public Flux<ClientDTO> searchClients(@RequestParam(required = false) @NotBlank(message = "El nombre no puede estar vacío.")  String name,
+                                         @RequestParam(required = false)
+                                         @NotBlank(message = "El email no puede estar vacío.")
+                                         @Email(message = "El correo electrónico debe tener un formato válido.")
+                                         String email) {
         return clientService.searchClients(name, email);
     }
 
