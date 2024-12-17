@@ -3,6 +3,7 @@ package com.pichincha.ms.client.service;
 import com.pichincha.ms.client.dto.ClientDTO;
 import com.pichincha.ms.client.model.Client;
 import com.pichincha.ms.client.repository.ClientRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -10,49 +11,58 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Service
+@RequiredArgsConstructor
 public class ClientService {
 
     private final ClientRepository clientRepository;
     private final WebClient webClient;
 
-    public ClientService(ClientRepository clientRepository, WebClient.Builder webClientBuilder) {
-        this.clientRepository = clientRepository;
-        this.webClient = webClientBuilder.baseUrl("https://gorest.co.in/public/v2/users").build();
-    }
 
     public Mono<ClientDTO> registerClient(ClientDTO clientDTO) {
-        // Primero, verifica si el correo electrónico ya existe en la base de datos
+        // Verifica si el correo electrónico ya está registrado en la base de datos
         return clientRepository.findByEmail(clientDTO.getEmail())
-                .flatMap(existingClient -> {
-                    return Mono.error(new RuntimeException("El correo electrónico ya está registrado."));
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    return webClient.get()
-                            .uri(uriBuilder -> uriBuilder
-                                    .queryParam("name", clientDTO.getName())
-                                    .queryParam("email", clientDTO.getEmail())
-                                    .build())
-                            .retrieve()
-                            .bodyToFlux(Client.class)
-                            .next()
-                            .flatMap(existingClient -> {
-                                // Si el cliente existe, actualiza el estado
-                                var client = new Client();
-                                client.setName(existingClient.getName());
-                                client.setEmail(existingClient.getEmail());
-                                client.setStatus("exists");
-                                return clientRepository.save(client);
-                            })
-                            .switchIfEmpty(Mono.defer(() -> {
-                                // Si no existe en el WebClient, crea un cliente nuevo con estado "active"
-                                var client = new Client();
-                                client.setName(clientDTO.getName());
-                                client.setEmail(clientDTO.getEmail());
-                                client.setGender(clientDTO.getGender());
-                                client.setStatus("active");
-                                return clientRepository.save(client);
-                            }));
-                })).map(this::toClientDTO);
+                .flatMap(existingClient -> Mono.error(new EmailAlreadyRegisteredException("El correo electrónico ya está registrado.")))
+                .switchIfEmpty(Mono.defer(() -> checkClientInExternalService(clientDTO)
+                        .flatMap(existingClient -> {
+                            // Si el cliente existe en el servicio externo, actualiza el estado
+                            var client = new Client();
+                            client.setName(existingClient.getName());
+                            client.setEmail(existingClient.getEmail());
+                            client.setStatus("exists");
+                            return clientRepository.save(client);
+                        })
+                        .switchIfEmpty(createNewClient(clientDTO)) // Si no existe, crea un nuevo cliente
+                ))
+                .map(this::toClientDTO);
+    }
+
+    // Método para verificar cliente en servicio externo
+    private Mono<Client> checkClientInExternalService(ClientDTO clientDTO) {
+        return webClient.get()
+                .uri("https://gorest.co.in/public/v2/users", uriBuilder -> uriBuilder
+                        .queryParam("name", clientDTO.getName())
+                        .queryParam("email", clientDTO.getEmail())
+                        .build())
+                .retrieve()
+                .bodyToFlux(Client.class)
+                .next(); // Toma el primer cliente que coincida
+    }
+
+    // Método para crear un nuevo cliente en caso de que no exista
+    private Mono<Client> createNewClient(ClientDTO clientDTO) {
+        var client = new Client();
+        client.setName(clientDTO.getName());
+        client.setEmail(clientDTO.getEmail());
+        client.setGender(clientDTO.getGender());
+        client.setStatus("active");
+        return clientRepository.save(client);
+    }
+
+    // Excepción personalizada
+    public static class EmailAlreadyRegisteredException extends RuntimeException {
+        public EmailAlreadyRegisteredException(String message) {
+            super(message);
+        }
     }
 
 
